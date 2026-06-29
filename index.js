@@ -253,3 +253,13 @@ app.get('/test', async (req, res) => {
     res.json({ error: e.message });
   }
 });
+app.get('/test-all', async (req, res) => {
+  try {
+    const subs = await getSubscriptions();
+    await sendPush(subs.jinhan, '🧪 테스트 알림!', 'JJlife 알림 연결 성공 🎉');
+    await sendPush(subs.jungseop, '🧪 테스트 알림!', 'JJlife 알림 연결 성공 🎉');
+    res.json({ ok: true });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
