@@ -82,12 +82,15 @@ function getKSTDateStr(offsetDays = 0) {
   return kst.toISOString().split('T')[0];
 }
 
-// 매일 오전 9시 KST
+// 매일 오전 9시 KST = UTC 0시
 cron.schedule('0 0 * * *', async () => {
-  console.log('일정 D-1 알림 체크...');
+  console.log('오전 9시 종합 알림 체크...');
   try {
     const subs = await getSubscriptions();
+    const todayStr = getKSTDateStr();
     const tomorrowStr = getKSTDateStr(1);
+
+    // 여행 D-1 체크
     const tripsDoc = await getDoc('shared/trips');
     const trips = tripsDoc?.fields?.list?.arrayValue?.values ?? [];
     for (const tripVal of trips) {
@@ -99,25 +102,7 @@ cron.schedule('0 0 * * *', async () => {
         await sendPush(subs.jinhan, `✈️ ${title} D-1!`, '내일 출발! 짐 챙겼는지 확인해요 🧳');
         await sendPush(subs.jungseop, `✈️ ${title} D-1!`, '내일 출발! 짐 챙겼는지 확인해요 🧳');
       }
-    }
-  } catch (e) {
-    console.error('일정 알림 오류', e);
-  }
-});
-// 매일 오후 3시 KST = UTC 6시
-cron.schedule('0 6 * * *', async () => {
-  console.log('오후 3시 종합 알림 체크...');
-  try {
-    const subs = await getSubscriptions();
-    const todayStr = getKSTDateStr();
-
-    // 여행 체크
-    const tripsDoc = await getDoc('shared/trips');
-    const trips = tripsDoc?.fields?.list?.arrayValue?.values ?? [];
-    for (const tripVal of trips) {
-      const trip = tripVal.mapValue?.fields;
-      if (!trip) continue;
-      const itinerary = trip.itinerary?.mapValue?.fields ?? {};
+      // 오늘 여행 일정
       if (itinerary[todayStr]) {
         const title = trip.title?.stringValue ?? '여행';
         const items = itinerary[todayStr]?.arrayValue?.values ?? [];
@@ -131,8 +116,8 @@ cron.schedule('0 6 * * *', async () => {
     const dogDoc = await getDoc('shared/dog');
     const lastWalk = getField(dogDoc, 'lastWalkDate');
     if (lastWalk !== todayStr) {
-      await sendPush(subs.jinhan, '🐾 짱구 산책!', '아직 산책 안 했어요');
-      await sendPush(subs.jungseop, '🐾 짱구 산책!', '아직 산책 안 했어요');
+      await sendPush(subs.jinhan, '🐾 짱구 산책!', '오늘 아직 산책 안 했어요');
+      await sendPush(subs.jungseop, '🐾 짱구 산책!', '오늘 아직 산책 안 했어요');
     }
 
     // 운동 체크
@@ -147,15 +132,13 @@ cron.schedule('0 6 * * *', async () => {
       await sendPush(subs.jungseop, '🏋️ 오늘 운동!', '아직 출석 체크 안 했어요');
     }
 
-    // 오늘의 일정 체크 (공유 + 개인)
+    // 공유 일정
     const eventsDoc = await getDoc('shared/events');
     const events = eventsDoc?.fields?.list?.arrayValue?.values ?? [];
     const todayEvents = events.filter(e => {
       const d = e.mapValue?.fields?.date?.stringValue;
       return d === todayStr;
     });
-
-    // 공유 일정
     const sharedEvents = todayEvents.filter(e => e.mapValue?.fields?.isShared?.booleanValue === true);
     if (sharedEvents.length > 0) {
       const titles = sharedEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
@@ -186,10 +169,11 @@ cron.schedule('0 6 * * *', async () => {
     }
 
   } catch (e) {
-    console.error('오후 3시 알림 오류', e);
+    console.error('오전 9시 알림 오류', e);
   }
 });
-// 매일 저녁 6시 KST
+
+// 매일 저녁 6시 KST = UTC 9시
 cron.schedule('0 9 * * *', async () => {
   console.log('짱구 산책 알림 체크...');
   try {
@@ -206,7 +190,7 @@ cron.schedule('0 9 * * *', async () => {
   }
 });
 
-// 매일 저녁 9시 KST
+// 매일 저녁 9시 KST = UTC 12시
 cron.schedule('0 12 * * *', async () => {
   console.log('운동 알림 체크...');
   try {
@@ -253,6 +237,7 @@ app.get('/test', async (req, res) => {
     res.json({ error: e.message });
   }
 });
+
 app.get('/test-all', async (req, res) => {
   try {
     const subs = await getSubscriptions();
