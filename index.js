@@ -77,9 +77,9 @@ async function sendPush(subscription, title, body) {
 
 function getKSTDateStr(offsetDays = 0) {
   const now = new Date();
-  now.setHours(now.getHours() + 9);
-  now.setDate(now.getDate() + offsetDays);
-  return now.toISOString().split('T')[0];
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  kst.setUTCDate(kst.getUTCDate() + offsetDays);
+  return kst.toISOString().split('T')[0];
 }
 
 // 매일 오전 9시 KST
