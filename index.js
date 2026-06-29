@@ -4,6 +4,10 @@ const webpush = require('web-push');
 const fetch = require('node-fetch');
 
 const app = express();
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  next();
+});
 const PORT = process.env.PORT || 3000;
 
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
