@@ -104,7 +104,91 @@ cron.schedule('0 0 * * *', async () => {
     console.error('일정 알림 오류', e);
   }
 });
+// 매일 오후 3시 KST = UTC 6시
+cron.schedule('0 6 * * *', async () => {
+  console.log('오후 3시 종합 알림 체크...');
+  try {
+    const subs = await getSubscriptions();
+    const todayStr = getKSTDateStr();
 
+    // 여행 체크
+    const tripsDoc = await getDoc('shared/trips');
+    const trips = tripsDoc?.fields?.list?.arrayValue?.values ?? [];
+    for (const tripVal of trips) {
+      const trip = tripVal.mapValue?.fields;
+      if (!trip) continue;
+      const itinerary = trip.itinerary?.mapValue?.fields ?? {};
+      if (itinerary[todayStr]) {
+        const title = trip.title?.stringValue ?? '여행';
+        const items = itinerary[todayStr]?.arrayValue?.values ?? [];
+        const summary = items.map(i => i.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+        await sendPush(subs.jinhan, `✈️ 오늘 ${title} 일정!`, summary || '오늘 여행 일정이 있어요');
+        await sendPush(subs.jungseop, `✈️ 오늘 ${title} 일정!`, summary || '오늘 여행 일정이 있어요');
+      }
+    }
+
+    // 짱구 산책 체크
+    const dogDoc = await getDoc('shared/dog');
+    const lastWalk = getField(dogDoc, 'lastWalkDate');
+    if (lastWalk !== todayStr) {
+      await sendPush(subs.jinhan, '🐾 짱구 산책!', '아직 산책 안 했어요');
+      await sendPush(subs.jungseop, '🐾 짱구 산책!', '아직 산책 안 했어요');
+    }
+
+    // 운동 체크
+    const jinhanDoc = await getDoc('users/jinhan');
+    const jinhanAtt = jinhanDoc?.fields?.attendance?.mapValue?.fields ?? {};
+    if (!jinhanAtt[todayStr]) {
+      await sendPush(subs.jinhan, '🏋️ 오늘 운동!', '아직 출석 체크 안 했어요');
+    }
+    const jungseopDoc = await getDoc('users/jungseop');
+    const jungseopAtt = jungseopDoc?.fields?.attendance?.mapValue?.fields ?? {};
+    if (!jungseopAtt[todayStr]) {
+      await sendPush(subs.jungseop, '🏋️ 오늘 운동!', '아직 출석 체크 안 했어요');
+    }
+
+    // 오늘의 일정 체크 (공유 + 개인)
+    const eventsDoc = await getDoc('shared/events');
+    const events = eventsDoc?.fields?.list?.arrayValue?.values ?? [];
+    const todayEvents = events.filter(e => {
+      const d = e.mapValue?.fields?.date?.stringValue;
+      return d === todayStr;
+    });
+
+    // 공유 일정
+    const sharedEvents = todayEvents.filter(e => e.mapValue?.fields?.isShared?.booleanValue === true);
+    if (sharedEvents.length > 0) {
+      const titles = sharedEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+      await sendPush(subs.jinhan, '📅 오늘 공유 일정', titles);
+      await sendPush(subs.jungseop, '📅 오늘 공유 일정', titles);
+    }
+
+    // 진한 개인 일정
+    const jinhanEvents = todayEvents.filter(e => {
+      const author = e.mapValue?.fields?.author?.stringValue;
+      const isShared = e.mapValue?.fields?.isShared?.booleanValue;
+      return author === 'jinhan' && !isShared;
+    });
+    if (jinhanEvents.length > 0) {
+      const titles = jinhanEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+      await sendPush(subs.jinhan, '📅 오늘 내 일정', titles);
+    }
+
+    // 정섭 개인 일정
+    const jungseopEvents = todayEvents.filter(e => {
+      const author = e.mapValue?.fields?.author?.stringValue;
+      const isShared = e.mapValue?.fields?.isShared?.booleanValue;
+      return author === 'jungseop' && !isShared;
+    });
+    if (jungseopEvents.length > 0) {
+      const titles = jungseopEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+      await sendPush(subs.jungseop, '📅 오늘 내 일정', titles);
+    }
+
+  } catch (e) {
+    console.error('오후 3시 알림 오류', e);
+  }
+});
 // 매일 저녁 6시 KST
 cron.schedule('0 9 * * *', async () => {
   console.log('짱구 산책 알림 체크...');
