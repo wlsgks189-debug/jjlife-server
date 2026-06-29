@@ -142,3 +142,16 @@ cron.schedule('0 12 * * *', async () => {
 app.get('/', (req, res) => res.send('JJlife 알림 서버 동작중 ✅'));
 
 app.listen(PORT, () => console.log(`서버 시작 포트 ${PORT}`));
+
+app.get('/test', async (req, res) => {
+  try {
+    const subs = await getSubscriptions();
+    const uid = req.query.uid || 'jinhan';
+    const sub = subs[uid];
+    if (!sub) return res.json({ error: '구독 정보 없음' });
+    await sendPush(sub, '🧪 테스트 알림!', 'JJlife 알림 연결 성공 🎉');
+    res.json({ ok: true, uid });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
