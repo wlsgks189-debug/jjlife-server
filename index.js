@@ -229,6 +229,16 @@ cron.schedule('0 12 * * *', async () => {
 
 app.get('/', (req, res) => res.send('JJlife 알림 서버 동작중 ✅'));
 
+// Render 슬립 방지 자체 ping (10분마다)
+setInterval(async () => {
+  try {
+    await fetch(`https://jjlife-server.onrender.com/`);
+    console.log('self-ping ok');
+  } catch(e) {
+    console.error('self-ping 실패', e.message);
+  }
+}, 10 * 60 * 1000);
+
 app.listen(PORT, () => console.log(`서버 시작 포트 ${PORT}`));
 
 app.get('/test', async (req, res) => {
