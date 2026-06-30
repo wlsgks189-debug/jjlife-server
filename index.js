@@ -243,3 +243,64 @@ app.get('/test-all', async (req, res) => {
     res.json({ error: e.message });
   }
 });
+app.get('/test-morning', async (req, res) => {
+  try {
+    const subs = await getSubscriptions();
+    const todayStr = getKSTDateStr();
+    const tomorrowStr = getKSTDateStr(1);
+
+    // 여행 D-1 + 오늘 여행
+    const tripsDoc = await getDoc('shared/data');
+    const trips = tripsDoc?.fields?.trips?.arrayValue?.values ?? [];
+    for (const tripVal of trips) {
+      const trip = tripVal.mapValue?.fields;
+      if (!trip) continue;
+      const itinerary = trip.itinerary?.mapValue?.fields ?? {};
+      if (itinerary[tomorrowStr]) {
+        const title = trip.title?.stringValue ?? '여행';
+        await sendPush(subs.jinhan, `✈️ ${title} D-1!`, '내일 출발! 짐 챙겼는지 확인해요 🧳');
+        await sendPush(subs.jungseop, `✈️ ${title} D-1!`, '내일 출발! 짐 챙겼는지 확인해요 🧳');
+      }
+      if (itinerary[todayStr]) {
+        const title = trip.title?.stringValue ?? '여행';
+        const items = itinerary[todayStr]?.arrayValue?.values ?? [];
+        const summary = items.map(i => i.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+        await sendPush(subs.jinhan, `✈️ 오늘 ${title} 일정!`, summary || '오늘 여행 일정이 있어요');
+        await sendPush(subs.jungseop, `✈️ 오늘 ${title} 일정!`, summary || '오늘 여행 일정이 있어요');
+      }
+    }
+
+    // 짱구 산책 (조건 무시하고 강제 발송)
+    await sendPush(subs.jinhan, '🐾 짱구 산책!', '오늘 아직 산책 안 했어요');
+    await sendPush(subs.jungseop, '🐾 짱구 산책!', '오늘 아직 산책 안 했어요');
+
+    // 운동 (조건 무시하고 강제 발송)
+    await sendPush(subs.jinhan, '🏋️ 오늘 운동!', '아직 출석 체크 안 했어요');
+    await sendPush(subs.jungseop, '🏋️ 오늘 운동!', '아직 출석 체크 안 했어요');
+
+    // 오늘 일정 (조건 무시하고 강제 발송)
+    const eventsDoc = await getDoc('shared/data');
+    const events = eventsDoc?.fields?.events?.arrayValue?.values ?? [];
+    const todayEvents = events.filter(e => e.mapValue?.fields?.date?.stringValue === todayStr);
+    const sharedEvents = todayEvents.filter(e => e.mapValue?.fields?.isShared?.booleanValue === true);
+    if (sharedEvents.length > 0) {
+      const titles = sharedEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+      await sendPush(subs.jinhan, '📅 오늘 공유 일정', titles);
+      await sendPush(subs.jungseop, '📅 오늘 공유 일정', titles);
+    }
+    const jinhanEvents = todayEvents.filter(e => e.mapValue?.fields?.author?.stringValue === 'jinhan' && !e.mapValue?.fields?.isShared?.booleanValue);
+    if (jinhanEvents.length > 0) {
+      const titles = jinhanEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+      await sendPush(subs.jinhan, '📅 오늘 내 일정', titles);
+    }
+    const jungseopEvents = todayEvents.filter(e => e.mapValue?.fields?.author?.stringValue === 'jungseop' && !e.mapValue?.fields?.isShared?.booleanValue);
+    if (jungseopEvents.length > 0) {
+      const titles = jungseopEvents.map(e => e.mapValue?.fields?.title?.stringValue).filter(Boolean).join(', ');
+      await sendPush(subs.jungseop, '📅 오늘 내 일정', titles);
+    }
+
+    res.json({ ok: true });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
