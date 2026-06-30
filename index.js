@@ -37,29 +37,24 @@ function getField(doc, field) {
 async function getSubscriptions() {
   try {
     const doc = await getDoc('shared/pushSubscriptions');
-    const jinhan = doc?.fields?.jinhan?.mapValue?.fields;
-    const jungseop = doc?.fields?.jungseop?.mapValue?.fields;
+    const fields = doc?.fields ?? {};
     const result = {};
-    if (jinhan?.endpoint?.stringValue) {
-      result.jinhan = {
-        endpoint: jinhan.endpoint.stringValue,
-        keys: {
-          p256dh: jinhan.p256dh?.stringValue,
-          auth: jinhan.auth?.stringValue
-        }
-      };
-    }
-    if (jungseop?.endpoint?.stringValue) {
-      result.jungseop = {
-        endpoint: jungseop.endpoint.stringValue,
-        keys: {
-          p256dh: jungseop.p256dh?.stringValue,
-          auth: jungseop.auth?.stringValue
-        }
-      };
+    for(const [key, val] of Object.entries(fields)) {
+      if(!key.endsWith('_phone')) continue;
+      const uid = key.replace('_phone', '');
+      const f = val?.mapValue?.fields;
+      if(f?.endpoint?.stringValue) {
+        result[uid] = {
+          endpoint: f.endpoint.stringValue,
+          keys: {
+            p256dh: f.p256dh?.stringValue,
+            auth: f.auth?.stringValue
+          }
+        };
+      }
     }
     return result;
-  } catch (e) {
+  } catch(e) {
     console.error('구독 정보 로드 실패', e);
     return {};
   }
