@@ -39,9 +39,7 @@ async function getSubscriptions() {
     const doc = await getDoc('shared/pushSubscriptions');
     const fields = doc?.fields ?? {};
     const result = {};
-    for(const [key, val] of Object.entries(fields)) {
-      if(!key.endsWith('_phone')) continue;
-      const uid = key.replace('_phone', '');
+    for(const [uid, val] of Object.entries(fields)) {
       const f = val?.mapValue?.fields;
       if(f?.endpoint?.stringValue) {
         result[uid] = {
