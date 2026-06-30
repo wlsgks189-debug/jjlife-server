@@ -91,8 +91,8 @@ cron.schedule('0 0 * * *', async () => {
     const tomorrowStr = getKSTDateStr(1);
 
     // 여행 D-1 체크
-    const tripsDoc = await getDoc('shared/trips');
-    const trips = tripsDoc?.fields?.list?.arrayValue?.values ?? [];
+   const tripsDoc = await getDoc('shared/data');
+const trips = tripsDoc?.fields?.trips?.arrayValue?.values ?? [];
     for (const tripVal of trips) {
       const trip = tripVal.mapValue?.fields;
       if (!trip) continue;
@@ -133,8 +133,8 @@ cron.schedule('0 0 * * *', async () => {
     }
 
     // 공유 일정
-    const eventsDoc = await getDoc('shared/events');
-    const events = eventsDoc?.fields?.list?.arrayValue?.values ?? [];
+    const eventsDoc = await getDoc('shared/data');
+const events = eventsDoc?.fields?.events?.arrayValue?.values ?? [];
     const todayEvents = events.filter(e => {
       const d = e.mapValue?.fields?.date?.stringValue;
       return d === todayStr;
