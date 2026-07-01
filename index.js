@@ -161,17 +161,24 @@ async function checkStocks(force = false) {
       prices[code] = { price: quote.price, changeRate: quote.changeRate, updatedAt: nowStr };
 
       const level = Math.floor(Math.abs(quote.changeRate) / 5) * 5;
-      const state = alertState[code];
-      const alreadySent = state?.date === todayStr && state?.level >= level;
+      const isUp = quote.changeRate > 0;
+      const prevState = alertState[code];
+      const stale = !prevState || prevState.date !== todayStr;
+      const prevLevel = stale ? 0 : (isUp ? (prevState.upLevel || 0) : (prevState.downLevel || 0));
+      const alreadySent = prevLevel >= level;
 
       if (level >= 5 && !alreadySent) {
-        const dir = quote.changeRate > 0 ? '상승' : '하락';
-        const sign = quote.changeRate > 0 ? '+' : '';
+        const dir = isUp ? '상승' : '하락';
+        const sign = isUp ? '+' : '';
         const title = `📈 ${name} ${sign}${quote.changeRate.toFixed(1)}% ${dir}`;
         const body = `현재가 ${quote.price.toLocaleString()}원`;
         await sendPush(subs.jinhan, title, body);
         await sendPush(subs.jungseop, title, body);
-        alertState[code] = { level, date: todayStr };
+        alertState[code] = {
+          date: todayStr,
+          upLevel: isUp ? level : (stale ? 0 : (prevState.upLevel || 0)),
+          downLevel: !isUp ? level : (stale ? 0 : (prevState.downLevel || 0))
+        };
       }
     }
 
