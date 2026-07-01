@@ -129,6 +129,7 @@ async function getNaverQuote(code) {
       headers: { 'Referer': 'https://finance.naver.com/' }
     });
     const json = await res.json();
+    console.log(`[네이버 응답 확인용] ${code}:`, JSON.stringify(json).slice(0, 500));
     const item = json?.datas?.[0];
     if (!item) return null;
     return {
@@ -151,7 +152,7 @@ async function checkStocks(force = false) {
     if (watchlist.length === 0) return;
 
     const todayStr = getKSTDateStr();
-    const prices = {};
+    const prices = { ...(fromFirestoreValue(sharedDoc?.fields?.stockPrices) || {}) };
 
     for (const { code, name } of watchlist) {
       const quote = await getNaverQuote(code);
