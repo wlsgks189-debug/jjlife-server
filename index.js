@@ -28,6 +28,46 @@ async function getDoc(path) {
   return res.json();
 }
 
+function fromFirestoreValue(v) {
+  if (!v) return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return parseInt(v.integerValue, 10);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('mapValue' in v) {
+    const obj = {};
+    const f = v.mapValue.fields || {};
+    for (const [k, val] of Object.entries(f)) obj[k] = fromFirestoreValue(val);
+    return obj;
+  }
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(fromFirestoreValue);
+  return null;
+}
+
+function toFirestoreValue(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreValue) } };
+  const fields = {};
+  for (const [k, v] of Object.entries(val)) fields[k] = toFirestoreValue(v);
+  return { mapValue: { fields } };
+}
+
+async function patchDoc(path, dataObj, fieldPaths) {
+  const fields = {};
+  for (const [k, v] of Object.entries(dataObj)) fields[k] = toFirestoreValue(v);
+  const mask = fieldPaths.map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&');
+  const res = await fetch(`${FIRESTORE_URL}/${path}?${mask}&key=${FIREBASE_API_KEY}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  return res.json();
+}
+
 function getField(doc, field) {
   const f = doc?.fields?.[field];
   if (!f) return null;
@@ -74,6 +114,75 @@ function getKSTDateStr(offsetDays = 0) {
   kst.setUTCDate(kst.getUTCDate() + offsetDays);
   return kst.toISOString().split('T')[0];
 }
+
+function isKSTMarketHours() {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const day = kst.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  return mins >= 9 * 60 && mins <= 15 * 60 + 30;
+}
+
+async function getNaverQuote(code) {
+  try {
+    const res = await fetch(`https://polling.finance.naver.com/api/realtime/domestic/stock/${code}`, {
+      headers: { 'Referer': 'https://finance.naver.com/' }
+    });
+    const json = await res.json();
+    const item = json?.datas?.[0];
+    if (!item) return null;
+    return {
+      price: Number(String(item.closePrice).replace(/,/g, '')),
+      changeRate: Number(item.fluctuationsRatio)
+    };
+  } catch (e) {
+    console.error(`${code} 시세 조회 실패`, e.message);
+    return null;
+  }
+}
+
+async function checkStocks(force = false) {
+  if (!force && !isKSTMarketHours()) return;
+  try {
+    const subs = await getSubscriptions();
+    const sharedDoc = await getDoc('shared/data');
+    const watchlist = fromFirestoreValue(sharedDoc?.fields?.stockWatchlist) || [];
+    const alertState = fromFirestoreValue(sharedDoc?.fields?.stockAlertState) || {};
+    if (watchlist.length === 0) return;
+
+    const todayStr = getKSTDateStr();
+    const prices = {};
+
+    for (const { code, name } of watchlist) {
+      const quote = await getNaverQuote(code);
+      if (!quote || quote.price == null || Number.isNaN(quote.changeRate)) continue;
+
+      const nowStr = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(11, 16);
+      prices[code] = { price: quote.price, changeRate: quote.changeRate, updatedAt: nowStr };
+
+      const level = Math.floor(Math.abs(quote.changeRate) / 5) * 5;
+      const state = alertState[code];
+      const alreadySent = state?.date === todayStr && state?.level >= level;
+
+      if (level >= 5 && !alreadySent) {
+        const dir = quote.changeRate > 0 ? '상승' : '하락';
+        const sign = quote.changeRate > 0 ? '+' : '';
+        const title = `📈 ${name} ${sign}${quote.changeRate.toFixed(1)}% ${dir}`;
+        const body = `현재가 ${quote.price.toLocaleString()}원`;
+        await sendPush(subs.jinhan, title, body);
+        await sendPush(subs.jungseop, title, body);
+        alertState[code] = { level, date: todayStr };
+      }
+    }
+
+    await patchDoc('shared/data', { stockPrices: prices, stockAlertState: alertState }, ['stockPrices', 'stockAlertState']);
+  } catch (e) {
+    console.error('주식 알림 오류', e);
+  }
+}
+
+// 장중 10분마다 주식 체크
+cron.schedule('*/10 * * * *', () => checkStocks());
 
 // 매일 오전 9시 KST = UTC 0시
 cron.schedule('0 0 * * *', async () => {
@@ -241,6 +350,15 @@ app.get('/test-all', async (req, res) => {
     res.json({ error: e.message });
   }
 });
+app.get('/test-stock', async (req, res) => {
+  try {
+    await checkStocks(true);
+    res.json({ ok: true });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 app.get('/test-morning', async (req, res) => {
   try {
     const subs = await getSubscriptions();
